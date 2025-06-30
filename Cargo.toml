@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = [
+    "rws-server",
+    "rws-client",
+    "rws-common",
+]
+
