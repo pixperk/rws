@@ -5,13 +5,12 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::accept_async;
 use futures_util::stream::{StreamExt};
 
-use crate::dispatcher::dispatch;
+use crate::{client::{Client, Clients}, dispatcher::dispatch};
 
 mod dispatcher;
 mod handler;
+mod client;
 
-
-type Clients = Arc<Mutex<HashMap<uuid::Uuid, tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>>>>;
 
 #[tokio::main]
 async fn main() {
@@ -26,10 +25,16 @@ async fn main() {
             let ws_stream = accept_async(stream).await.unwrap(); //upgrade to WebSocket stream
             let id = uuid::Uuid::new_v4();
 
-             //clients.lock().await.insert(id, ws_stream);
 
             println!("New client connected: {}", id);
-            let (mut write, mut read) = ws_stream.split();
+            let (write, mut read) = ws_stream.split();
+            let tx = Arc::new(Mutex::new(write));
+            let client = Client{
+                id,
+                tx: tx.clone(),
+            };
+
+            clients.lock().await.insert(id, client.clone());
 
             // Handle incoming messages
             while let Some(Ok(msg)) = read.next().await {
