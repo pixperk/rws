@@ -5,6 +5,10 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::accept_async;
 use futures_util::stream::{StreamExt};
 
+use crate::dispatcher::dispatch;
+
+mod dispatcher;
+mod handler;
 
 
 type Clients = Arc<Mutex<HashMap<uuid::Uuid, tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>>>>;
@@ -19,7 +23,7 @@ async fn main() {
     while let Ok((stream, _)) = listener.accept().await{
         let clients = Arc::clone(&clients);
         tokio::spawn(async move{
-            let ws_stream = accept_async(stream).await.unwrap();
+            let ws_stream = accept_async(stream).await.unwrap(); //upgrade to WebSocket stream
             let id = uuid::Uuid::new_v4();
 
              //clients.lock().await.insert(id, ws_stream);
@@ -31,7 +35,7 @@ async fn main() {
             while let Some(Ok(msg)) = read.next().await {
                 if msg.is_text() {
                     if let Ok(msg_obj) = serde_json::from_str::<Message>(&msg.to_string()) {
-                        println!("Received from {}: {:?}", id, msg_obj);
+                        dispatch(&msg_obj.event, &msg_obj, id, &clients).await;
                     }
                 }
             }
