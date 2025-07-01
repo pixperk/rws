@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "event", content = "data")]
 pub enum EventMessage {
     Join { username: String },
-    Chat { sender: String, content: String },
+    AssignedId { user_id: uuid::Uuid },
+    Chat { sender_id : uuid::Uuid, sender_name : String,  content: String },
     CreateRoom { room_name: String },
     JoinRoom { room_id: uuid::Uuid },
     LeaveRoom { room_id: uuid::Uuid },

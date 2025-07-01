@@ -37,6 +37,14 @@ pub async fn handle_join(username : String, sender_id : uuid::Uuid, clients: &Cl
         if let Some(client) = clients_guard.get_mut(&sender_id){
             client.username = Some(username.clone());
             println!("🟢 {} joined as {}", sender_id, username);
+
+
+            //Assign an ID to the client
+            let id_msg = EventMessage::AssignedId { user_id: sender_id };
+            let tx = client.tx.clone();
+            let payload = serde_json::to_string(&id_msg).unwrap();
+            let mut tx_lock = tx.lock().await;
+            let _ = tx_lock.send(WsMessage::Text(payload)).await;
         }
     } // Release the lock here
 
@@ -55,10 +63,9 @@ pub async fn handle_chat(content : String, sender_id : uuid::Uuid, clients : &Cl
             .unwrap_or_else(|| "Unknown".to_string())
     }; // Release the lock here
 
-    println!("DEBUG: Sender username: '{}'", sender); // Debug log
-
+   
     // Broadcast the chat message to all clients (including sender)
-    let chat_msg = EventMessage::Chat { sender, content };
+    let chat_msg = EventMessage::Chat { sender_id, sender_name :sender,  content };
     println!("DEBUG: Broadcasting message: {:?}", chat_msg); // Debug log
     send(&chat_msg, clients).await;
 }

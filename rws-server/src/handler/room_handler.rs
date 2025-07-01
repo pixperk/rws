@@ -1,4 +1,8 @@
 use std::collections::HashSet;
+use futures_util::SinkExt;
+use tokio_tungstenite::tungstenite::{protocol::Message as WsMessage};
+
+use rws_common::EventMessage;
 
 use crate::{client::Clients, room, util::get_username_from_client};
 
@@ -30,7 +34,17 @@ pub async fn handle_create_room(
 
     rm.rooms.insert(room_id, created_room);
 
+    let create_room_event = EventMessage::CreateRoom { room_name: room_name.clone() };
+
     let user = get_username_from_client(clients, client_id);
+
+   let clients = clients.lock().await;
+    let tx = clients.get(&client_id).map(|c| c.tx.clone());
+    let payload = serde_json::to_string(&create_room_event).unwrap();
+    let tx = tx.unwrap();
+    let mut tx_lock = tx.lock().await;
+    let _ = tx_lock.send(WsMessage::Text(payload)).await;
+    
 
     if let Some(username) = user.await {
         println!("🟢 {} created room {}", username, room_name);
