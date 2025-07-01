@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use rws_common::Message;
+use rws_common::EventMessage;
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::accept_async;
 use futures_util::stream::{StreamExt};
@@ -31,6 +31,7 @@ async fn main() {
             let tx = Arc::new(Mutex::new(write));
             let client = Client{
                 id,
+                username: None,
                 tx: tx.clone(),
             };
 
@@ -39,8 +40,8 @@ async fn main() {
             // Handle incoming messages
             while let Some(Ok(msg)) = read.next().await {
                 if msg.is_text() {
-                    if let Ok(msg_obj) = serde_json::from_str::<Message>(&msg.to_string()) {
-                        dispatch(&msg_obj.event, &msg_obj, id, &clients).await;
+                    if let Ok(msg_obj) = serde_json::from_str::<EventMessage>(&msg.to_string()) {
+                       dispatch(msg_obj, id,  &clients).await;
                     }
                 }
             }

@@ -12,6 +12,7 @@ pub type Tx = Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, WsMessage>>>;
 #[derive(Debug, Clone)]
 pub struct Client {
     pub id: Uuid,
+    pub username : Option<String>,
     pub tx: Tx,
 }
 

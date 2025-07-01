@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "event", content = "data")]
 pub enum EventMessage {
     Join {username : String},
-    Chat {content : String},
+    Chat {
+        sender: String,
+        content : String
+    },
     Ping,
 }
