@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Message {
-    pub event: String,
-    pub data : serde_json::Value,
+#[serde(tag = "event", content = "data")]
+pub enum EventMessage {
+    Join {username : String},
+    Chat {content : String},
+    Ping,
 }

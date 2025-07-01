@@ -46,9 +46,9 @@ async fn main() {
             }
 
                   
-            
+             clients.lock().await.remove(&id);
             println!("Client {} disconnected", id);
-            clients.lock().await.remove(&id);
+           
              
         });
     }

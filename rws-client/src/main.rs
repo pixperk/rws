@@ -20,7 +20,7 @@ async fn main() {
         }
     });
 
-    // Send your message
+    
     let msg = Message {
         event: "chat".to_string(),
         data: serde_json::json!({ "user": "yashaswi", "msg": "yo server" }),
@@ -29,6 +29,6 @@ async fn main() {
     let raw = serde_json::to_string(&msg).unwrap();
     write.send(tungstenite::Message::Text(raw)).await.unwrap();
 
-    // Optional: wait a bit before exit so receive task doesn't instantly die
+   
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 }
