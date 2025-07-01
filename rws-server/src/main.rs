@@ -10,6 +10,7 @@ use crate::{client::{Client, Clients}, dispatcher::dispatch};
 mod dispatcher;
 mod handler;
 mod client;
+mod room;
 
 
 #[tokio::main]
