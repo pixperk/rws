@@ -5,6 +5,8 @@ use crate::Clients;
 
 use tokio_tungstenite::tungstenite::{protocol::Message as WsMessage};
 
+pub mod room_handler;
+
 pub async fn handle_join(username : String, sender_id : uuid::Uuid, clients: &Clients){
     let mut clients = clients.lock().await;
 

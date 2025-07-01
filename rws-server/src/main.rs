@@ -5,11 +5,12 @@ use tokio::{net::TcpListener, sync::Mutex};
 use tokio_tungstenite::accept_async;
 use futures_util::stream::{StreamExt};
 
-use crate::{client::{Client, Clients}, dispatcher::dispatch};
+use crate::{client::{Client, Clients}, dispatcher::dispatch, room::RoomManager};
 
 mod dispatcher;
 mod handler;
 mod client;
+mod util;
 mod room;
 
 
@@ -17,6 +18,7 @@ mod room;
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
+    
     
     println!("Starting RWS server on ws://localhost:3000...");
 
@@ -37,12 +39,13 @@ async fn main() {
             };
 
             clients.lock().await.insert(id, client.clone());
+            let room_manager = Arc::new(Mutex::new(RoomManager::default()));
 
             // Handle incoming messages
             while let Some(Ok(msg)) = read.next().await {
                 if msg.is_text() {
                     if let Ok(msg_obj) = serde_json::from_str::<EventMessage>(&msg.to_string()) {
-                       dispatch(msg_obj, id,  &clients).await;
+                       dispatch(msg_obj, id,  &clients, &room_manager).await;
                     }
                 }
             }
@@ -55,3 +58,4 @@ async fn main() {
         });
     }
 }
+

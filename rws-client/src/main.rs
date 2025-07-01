@@ -21,6 +21,9 @@ async fn main() {
 
     let (mut write, mut read) = ws_stream.split();
 
+    // Clone username for the spawned task
+    let username_for_task = username.clone();
+
     // Task to receive messages
     tokio::spawn(async move {
         while let Some(msg) = read.next().await {
@@ -35,6 +38,15 @@ async fn main() {
                         }
                         Ok(EventMessage::Join { username }) => {
                             println!("👤 {} joined", username);
+                        }
+                        Ok(EventMessage::CreateRoom { room_name}) => {
+                            println!("🆕 Room created: {} by {}", room_name, username_for_task.clone());
+                        }
+                        Ok(EventMessage::LeaveRoom { room_id }) => {
+                            println!("🚪 Left room: {}", room_id);
+                        }
+                        Ok(EventMessage::JoinRoom { room_id }) => {
+                            println!("👥 Joined room: {}", room_id);
                         }
                         Err(_) => {
                             println!("❓ Unknown message: {}", text);
