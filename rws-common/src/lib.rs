@@ -7,8 +7,8 @@ pub enum EventMessage {
     AssignedId { user_id: uuid::Uuid },
     Chat { sender: UserInfo, content: String },
     CreateRoom { creator: UserInfo, room_name: String },
-    JoinRoom { user: UserInfo, room_id: uuid::Uuid },
-    LeaveRoom { user: UserInfo, room_id: uuid::Uuid },
+    JoinRoom { user: UserInfo, room: RoomInfo },
+    LeaveRoom { user: UserInfo, room: RoomInfo },
     Error { error: ErrorCode },
     Ping,
 }
@@ -17,6 +17,12 @@ pub enum EventMessage {
 pub struct UserInfo {
     pub id: uuid::Uuid,
     pub username: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RoomInfo {
+    pub id : uuid::Uuid,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -123,7 +123,10 @@ impl RoomManager {
                         .await
                         .unwrap_or_else(|| "Unknown".to_string()),
                 },
-                room_id,
+                room: rws_common::RoomInfo {
+                    id: room_id,
+                    name: room.name.clone(),
+                },
             };
             {};
 

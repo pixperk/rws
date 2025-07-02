@@ -89,7 +89,10 @@ pub async fn connect_and_handle(
                                 id: my_id,
                                 username: username.clone(),
                             },
-                            room_id,
+                            room: rws_common::RoomInfo {
+                                id: room_id,
+                                name: "".to_string(), // Name can be empty for join requests
+                            },
                         }
                     } else {
                         // If we don't have our id yet, skip sending the message
@@ -112,7 +115,10 @@ pub async fn connect_and_handle(
                                 id: my_id,
                                 username: username.clone(),
                             },
-                            room_id,
+                            room: rws_common::RoomInfo {
+                                id: room_id,
+                                name: "".to_string(), // Name can be empty for leave requests
+                            },
                         }
                     } else {
                         // If we don't have our id yet, skip sending the message
@@ -175,22 +181,22 @@ fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
         }
         EventMessage::JoinRoom {
             user: rws_common::UserInfo { id: user_id, username },
-            room_id,
+            room : rws_common::RoomInfo { id: _, name },
         } => {
             if self_id == &user_id {
-                format!("✅ You joined room {}", room_id)
+                format!("✅ You joined room {}", name)
             } else {
-                format!("👥 {} joined room {}", username, room_id)
+                format!("👥 {} joined room {}", username, name)
             }
         }
         EventMessage::LeaveRoom {
             user: rws_common::UserInfo { id: user_id, username },
-            room_id,
+            room : rws_common::RoomInfo { id: _, name },
         } => {
             if self_id == &user_id {
-                format!("🚪 You left room {}", room_id)
+                format!("🚪 You left room {}", name)
             } else {
-                format!("👋 {} left room {}", username, room_id)
+                format!("👋 {} left room {}", username, name)
             }
         }
         EventMessage::Error { error } => match error {
