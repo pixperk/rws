@@ -2,7 +2,7 @@ use rws_common::EventMessage;
 use tokio_tungstenite::tungstenite::protocol::Message as WsMessage;
 use futures_util::SinkExt;
 
-use crate::client::Clients;
+use crate::{client::Clients, room::SharedRoomManager};
 
 /// Broadcast a message to all connected clients
 pub async fn send(message: &EventMessage, clients: &Clients) {
@@ -24,6 +24,27 @@ pub async fn broadcast(message: &EventMessage, sender_id: uuid::Uuid, clients: &
         if *id != sender_id {
             let mut tx = client.tx.lock().await;
             let _ = tx.send(WsMessage::Text(payload.clone())).await;
+        }
+    }
+}
+
+pub async fn broadcast_to_room(
+    message: &EventMessage,
+    room_id: uuid::Uuid,
+    room_manager: &SharedRoomManager,
+    clients: &Clients,
+){
+    let rm = room_manager.lock().await;
+    let room = rm.rooms.get(&room_id);
+    let payload = serde_json::to_string(message).unwrap();
+
+    if let Some(room) = room {
+        let c = clients.lock().await;
+        for id in &room.members {
+            if let Some(client) = c.get(id) {
+                let mut tx = client.tx.lock().await;
+                let _ = tx.send(WsMessage::Text(payload.clone())).await;
+            }
         }
     }
 }
