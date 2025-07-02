@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum EventMessage {
     Join { username: String },
     AssignedId { user_id: uuid::Uuid },
-    Chat { sender: UserInfo, content: String },
+    Chat { sender: UserInfo, content: String, scope: ChatScope },
     CreateRoom { creator: UserInfo, room_name: String },
     JoinRoom { user: UserInfo, room: RoomInfo },
     LeaveRoom { user: UserInfo, room: RoomInfo },
@@ -33,4 +33,11 @@ pub enum ErrorCode {
     AlreadyInRoom { message: String },
     InvalidRoomId { message: String },
     PermissionDenied { message: String },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "scope", content = "details")]
+pub enum ChatScope {
+    Global,
+    Room{room : RoomInfo},
 }

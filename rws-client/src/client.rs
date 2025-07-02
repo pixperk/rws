@@ -140,6 +140,7 @@ pub async fn connect_and_handle(
                         username: username.clone(),
                     },
                     content: input,
+                    scope : rws_common::ChatScope::Global // Default to global chat
                 }
             } else {
                 // If we don't have our id yet, skip sending the message
@@ -161,11 +162,23 @@ fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
         EventMessage::Chat {
             sender: rws_common::UserInfo { id: sender_id, username: sender_name },
             content,
+            scope 
         } => {
-            if self_id == &sender_id {
-                format!("💬 You: {}", content)
-            } else {
-                format!("💬 {}: {}", sender_name, content)
+            match scope {
+                rws_common::ChatScope::Global => {
+                    if self_id == &sender_id {
+                        format!("[GLOBAL]💬 You: {}", content)
+                    } else {
+                        format!("[GLOBAL]💬 {}: {}", sender_name, content)
+                    }
+                }
+                rws_common::ChatScope::Room { room } => {
+                    if self_id == &sender_id {
+                        format!("[{}]🏠 You: {}", room.name, content)
+                    } else {
+                        format!("[{}]🏠 {}: {}",room.name, sender_name, content)
+                    }
+                }
             }
         }
         EventMessage::Join { username } => {
