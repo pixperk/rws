@@ -28,16 +28,32 @@ pub async fn broadcast(message: &EventMessage, sender_id: uuid::Uuid, clients: &
     }
 }
 
-/// Send a message to a specific client
+/// Get a client by ID
+pub async fn get_client_by_id(
+    clients: &Clients,
+    client_id: uuid::Uuid,
+) -> Option<crate::client::Client> {
+    let clients = clients.lock().await;
+    clients.get(&client_id).cloned()
+}
+
+/// Send a message to a specific client instance
+pub async fn send_to_client_instance(
+    client: &crate::client::Client,
+    event: EventMessage,
+) {
+    let payload = serde_json::to_string(&event).unwrap();
+    let mut tx_lock = client.tx.lock().await;
+    let _ = tx_lock.send(WsMessage::Text(payload)).await;
+}
+
+/// Send a message to a specific client by ID
 pub async fn send_to_client(
     clients: &Clients,
     client_id: uuid::Uuid,
     event: EventMessage,
 ) {
-    let clients = clients.lock().await;
-    let tx = clients.get(&client_id).map(|c| c.tx.clone());
-    let payload = serde_json::to_string(&event).unwrap();
-    let tx = tx.unwrap();
-    let mut tx_lock = tx.lock().await;
-    let _ = tx_lock.send(WsMessage::Text(payload)).await;
+    if let Some(client) = get_client_by_id(clients, client_id).await {
+        send_to_client_instance(&client, event).await;
+    }
 }

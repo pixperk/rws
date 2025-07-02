@@ -1,5 +1,4 @@
-use crate::{util::broadcast::{send, send_to_client}, Clients};
-
+use crate::{util::broadcast::{send, send_to_client_instance}, Clients};
 use rws_common::{EventMessage, UserInfo};
 
 
@@ -17,7 +16,7 @@ pub async fn handle_join(username: String, sender_id: uuid::Uuid, clients: &Clie
 
             //Assign an ID to the client
             let id_msg = EventMessage::AssignedId { user_id: sender_id };
-            send_to_client(clients, sender_id, id_msg).await;
+            send_to_client_instance(client, id_msg).await;
         }
     } // Release the lock here
 
