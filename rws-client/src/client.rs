@@ -64,14 +64,29 @@ pub async fn connect_and_handle(
 
         let message = if input.starts_with("/create ") {
             let room_name = input.strip_prefix("/create ").unwrap().to_string();
-            EventMessage::CreateRoom { room_name }
+            // Lock and extract the user id
+            let id_guard = self_id.lock().await;
+            if let Some(my_id) = *id_guard {
+                EventMessage::CreateRoom { 
+                    creator: rws_common::UserInfo {
+                        id: my_id,
+                        username: username.clone(),
+                    },
+                    room_name
+                }
+            } else {
+                // If we don't have our id yet, skip sending the message
+                continue;
+            }
         } else {
             // Lock and extract the user id
             let id_guard = self_id.lock().await;
             if let Some(my_id) = *id_guard {
                 EventMessage::Chat {
-                    sender_id: my_id,
-                    sender_name: username.clone(),
+                    sender: rws_common::UserInfo {
+                        id: my_id,
+                        username: username.clone(),
+                    },
                     content: input,
                 }
             } else {
@@ -92,8 +107,7 @@ pub async fn connect_and_handle(
 fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
     match event {
         EventMessage::Chat {
-            sender_id,
-            sender_name,
+            sender: rws_common::UserInfo { id: sender_id, username: sender_name },
             content,
         } => {
             if self_id == &sender_id {
@@ -107,8 +121,11 @@ fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
                 format!("👋 {} joined", username)
             
         }
-        EventMessage::CreateRoom { room_name } => {
-            format!("🏠 Room '{}' created!", room_name)
+        EventMessage::CreateRoom { 
+            creator: rws_common::UserInfo { id: _, username },
+            room_name,
+        }=> {
+            format!("🏠 Room '{}' created! by '{}'", room_name, username)
         }
         _ => String::new(),
     }

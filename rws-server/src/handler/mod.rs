@@ -1,9 +1,8 @@
-use futures_util::SinkExt;
-use rws_common::EventMessage;
 use crate::Clients;
+use futures_util::SinkExt;
+use rws_common::{EventMessage, UserInfo};
 
-
-use tokio_tungstenite::tungstenite::{protocol::Message as WsMessage};
+use tokio_tungstenite::tungstenite::protocol::Message as WsMessage;
 
 pub mod room_handler;
 
@@ -31,13 +30,12 @@ pub async fn broadcast(message: &EventMessage, sender_id: uuid::Uuid, clients: &
     }
 }
 
-pub async fn handle_join(username : String, sender_id : uuid::Uuid, clients: &Clients){
+pub async fn handle_join(username: String, sender_id: uuid::Uuid, clients: &Clients) {
     {
         let mut clients_guard = clients.lock().await;
-        if let Some(client) = clients_guard.get_mut(&sender_id){
+        if let Some(client) = clients_guard.get_mut(&sender_id) {
             client.username = Some(username.clone());
             println!("🟢 {} joined as {}", sender_id, username);
-
 
             //Assign an ID to the client
             let id_msg = EventMessage::AssignedId { user_id: sender_id };
@@ -53,19 +51,28 @@ pub async fn handle_join(username : String, sender_id : uuid::Uuid, clients: &Cl
     send(&join_msg, clients).await;
 }
 
-pub async fn handle_chat(content : String, sender_id : uuid::Uuid, clients : &Clients){
-    println!("DEBUG: Received chat message: '{}' from {}", content, sender_id); // Debug log
-    
+pub async fn handle_chat(content: String, sender_id: uuid::Uuid, clients: &Clients) {
+    println!(
+        "DEBUG: Received chat message: '{}' from {}",
+        content, sender_id
+    ); // Debug log
+
     let sender = {
         let clients_guard = clients.lock().await;
-        clients_guard.get(&sender_id)
+        clients_guard
+            .get(&sender_id)
             .and_then(|client| client.username.clone())
             .unwrap_or_else(|| "Unknown".to_string())
     }; // Release the lock here
 
-   
     // Broadcast the chat message to all clients (including sender)
-    let chat_msg = EventMessage::Chat { sender_id, sender_name :sender,  content };
+    let chat_msg = EventMessage::Chat {
+        sender: UserInfo {
+            id: sender_id,
+            username: sender.clone(),
+        },
+        content,
+    };
     println!("DEBUG: Broadcasting message: {:?}", chat_msg); // Debug log
     send(&chat_msg, clients).await;
 }

@@ -34,11 +34,17 @@ pub async fn handle_create_room(
 
     rm.rooms.insert(room_id, created_room);
 
-    let create_room_event = EventMessage::CreateRoom { room_name: room_name.clone() };
+    let create_room_event = EventMessage::CreateRoom { 
+        creator: rws_common::UserInfo {
+            id: client_id,
+            username: get_username_from_client(clients, client_id).await.unwrap_or_else(|| "Unknown".to_string())
+        },
+        room_name: room_name.clone()
+     };
 
     let user = get_username_from_client(clients, client_id);
 
-   let clients = clients.lock().await;
+    let clients = clients.lock().await;
     let tx = clients.get(&client_id).map(|c| c.tx.clone());
     let payload = serde_json::to_string(&create_room_event).unwrap();
     let tx = tx.unwrap();
