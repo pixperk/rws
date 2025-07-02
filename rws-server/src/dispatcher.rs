@@ -14,6 +14,9 @@ pub async fn dispatch(message: EventMessage, sender_id: uuid::Uuid, clients: &Cl
             EventMessage::JoinRoom { user, room } => {
                 room_manager.lock().await.handle_join_room(clients, user.id, room.id).await;
             }
+            EventMessage::LeaveRoom { user, room : _ } => {
+                room_manager.lock().await.handle_leave_room(clients, user.id).await;
+            }
             _ => {
                 eprintln!("❓ Unknown message: {:?}", message);
             }

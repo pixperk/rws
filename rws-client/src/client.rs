@@ -104,31 +104,22 @@ pub async fn connect_and_handle(
                     continue;
                 }
             }
-        } else if input.starts_with("/leave ") {
-            let room_id_str = input.strip_prefix("/leave ").unwrap().to_string();
-            match uuid::Uuid::parse_str(&room_id_str) {
-                Ok(room_id) => {
-                    let id_guard = self_id.lock().await;
-                    if let Some(my_id) = *id_guard {
-                        EventMessage::LeaveRoom {
-                            user: rws_common::UserInfo {
-                                id: my_id,
-                                username: username.clone(),
-                            },
-                            room: rws_common::RoomInfo {
-                                id: room_id,
-                                name: "".to_string(), // Name can be empty for leave requests
-                            },
-                        }
-                    } else {
-                        // If we don't have our id yet, skip sending the message
-                        continue;
-                    }
+        } else if input.starts_with("/leave") {
+            let id_guard = self_id.lock().await;
+            if let Some(my_id) = *id_guard {
+                EventMessage::LeaveRoom {
+                    user: rws_common::UserInfo {
+                        id: my_id,
+                        username: username.clone(),
+                    },
+                    room: rws_common::RoomInfo {
+                        id: uuid::Uuid::nil(), // Server will determine the room
+                        name: "".to_string(),
+                    },
                 }
-                Err(_) => {
-                    ui_tx.send("❌ Invalid room ID format. Use: /leave <room-uuid>".to_string())?;
-                    continue;
-                }
+            } else {
+                // If we don't have our id yet, skip sending the message
+                continue;
             }
         } else {
             // Lock and extract the user id
