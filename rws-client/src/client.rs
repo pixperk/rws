@@ -78,6 +78,52 @@ pub async fn connect_and_handle(
                 // If we don't have our id yet, skip sending the message
                 continue;
             }
+        } else if input.starts_with("/join ") {
+            let room_id_str = input.strip_prefix("/join ").unwrap().trim();
+            match uuid::Uuid::parse_str(room_id_str) {
+                Ok(room_id) => {
+                    let id_guard = self_id.lock().await;
+                    if let Some(my_id) = *id_guard {
+                        EventMessage::JoinRoom {
+                            user: rws_common::UserInfo {
+                                id: my_id,
+                                username: username.clone(),
+                            },
+                            room_id,
+                        }
+                    } else {
+                        // If we don't have our id yet, skip sending the message
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    ui_tx.send("❌ Invalid room ID format. Use: /join <room-uuid>".to_string())?;
+                    continue;
+                }
+            }
+        } else if input.starts_with("/leave ") {
+            let room_id_str = input.strip_prefix("/leave ").unwrap().to_string();
+            match uuid::Uuid::parse_str(&room_id_str) {
+                Ok(room_id) => {
+                    let id_guard = self_id.lock().await;
+                    if let Some(my_id) = *id_guard {
+                        EventMessage::LeaveRoom {
+                            user: rws_common::UserInfo {
+                                id: my_id,
+                                username: username.clone(),
+                            },
+                            room_id,
+                        }
+                    } else {
+                        // If we don't have our id yet, skip sending the message
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    ui_tx.send("❌ Invalid room ID format. Use: /leave <room-uuid>".to_string())?;
+                    continue;
+                }
+            }
         } else {
             // Lock and extract the user id
             let id_guard = self_id.lock().await;
@@ -124,8 +170,28 @@ fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
         EventMessage::CreateRoom { 
             creator: rws_common::UserInfo { id: _, username },
             room_name,
-        }=> {
+        } => {
             format!("🏠 Room '{}' created! by '{}'", room_name, username)
+        }
+        EventMessage::JoinRoom {
+            user: rws_common::UserInfo { id: user_id, username },
+            room_id,
+        } => {
+            if self_id == &user_id {
+                format!("✅ You joined room {}", room_id)
+            } else {
+                format!("👥 {} joined room {}", username, room_id)
+            }
+        }
+        EventMessage::LeaveRoom {
+            user: rws_common::UserInfo { id: user_id, username },
+            room_id,
+        } => {
+            if self_id == &user_id {
+                format!("🚪 You left room {}", room_id)
+            } else {
+                format!("👋 {} left room {}", username, room_id)
+            }
         }
         EventMessage::Error { error } => match error {
             rws_common::ErrorCode::RoomNotFound { message } => format!("❌ Room not found: {}", message),

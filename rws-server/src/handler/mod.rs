@@ -51,7 +51,8 @@ pub async fn handle_chat(content: String, sender_id: uuid::Uuid, clients: &Clien
         Some(room_id) => {
             // If the user is in a room, broadcast to that room
             println!("DEBUG: Broadcasting to room {}: {:?}", room_id, chat_msg); // Debug log
-            broadcast_to_room(&chat_msg, room_id, room_manager, clients).await;
+            let room_manager = room_manager.lock().await;
+            broadcast_to_room(&chat_msg, room_id, &room_manager, clients).await;
         },
         None => {
             // If the user is not in a room, broadcast to all clients

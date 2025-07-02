@@ -1,10 +1,13 @@
-use std::collections::{HashMap, HashSet};
 use rws_common::EventMessage;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     client::Clients,
     room::{self, RoomManager},
-    util::{broadcast::send_to_client, get_username_from_client},
+    util::{
+        broadcast::{broadcast_to_room, send_to_client},
+        get_username_from_client,
+    },
 };
 
 impl RoomManager {
@@ -89,6 +92,56 @@ impl RoomManager {
 
         send_to_client(clients, client_id, create_room_event).await;
     }
+
+    pub async fn handle_join_room(
+        &mut self,
+        clients: &Clients,
+        client_id: uuid::Uuid,
+        room_id: uuid::Uuid,
+    ) {
+        if let Some(room) = self.rooms.get_mut(&room_id) {
+            if room.members.contains(&client_id) {
+                eprintln!("Client {} is already in room {}", client_id, room_id);
+
+                let error_event = EventMessage::Error {
+                    error: rws_common::ErrorCode::AlreadyInRoom {
+                        message: format!("Client {} is already in room {}", client_id, room_id),
+                    },
+                };
+
+                send_to_client(clients, client_id, error_event).await;
+                return;
+            }
+
+            room.members.insert(client_id);
+            self.user_rooms.insert(client_id, room_id);
+
+            let join_event = EventMessage::JoinRoom {
+                user: rws_common::UserInfo {
+                    id: client_id,
+                    username: get_username_from_client(clients, client_id)
+                        .await
+                        .unwrap_or_else(|| "Unknown".to_string()),
+                },
+                room_id,
+            };
+            {};
+
+            let room_name = room.name.clone();
+
+            broadcast_to_room(&join_event, room_id, self, clients).await;
+
+            println!("🟢 Client {} joined room {}", client_id, room_name);
+        } else {
+            eprintln!("Room with id {} not found", room_id);
+
+            let error_event = EventMessage::Error {
+                error: rws_common::ErrorCode::RoomNotFound {
+                    message: format!("Room with id {} not found", room_id),
+                },
+            };
+
+            send_to_client(clients, client_id, error_event).await;
+        }
+    }
 }
-
-

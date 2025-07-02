@@ -18,12 +18,13 @@ mod room;
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
-    
+    let room_manager = Arc::new(Mutex::new(RoomManager::new()));
     
     println!("Starting RWS server on ws://localhost:3000...");
 
     while let Ok((stream, _)) = listener.accept().await{
         let clients = Arc::clone(&clients);
+        let room_manager = Arc::clone(&room_manager);
         tokio::spawn(async move{
             let ws_stream = accept_async(stream).await.unwrap(); //upgrade to WebSocket stream
             let id = uuid::Uuid::new_v4();
@@ -39,7 +40,8 @@ async fn main() {
             };
 
             clients.lock().await.insert(id, client.clone());
-            let room_manager = Arc::new(Mutex::new(RoomManager::default()));
+
+            
 
             // Handle incoming messages
             while let Some(Ok(msg)) = read.next().await {
