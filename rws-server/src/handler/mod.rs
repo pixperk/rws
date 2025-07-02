@@ -1,10 +1,8 @@
 use crate::{
-    Clients,
-    room::SharedRoomManager,
-    util::{
-        broadcast::{broadcast_to_room, get_client_by_id, send, send_to_client_instance},
+    room::SharedRoomManager, util::{
+        broadcast::{broadcast_to_room, send, send_to_client, send_to_client_instance},
         get_username_from_client,
-    },
+    }, Clients
 };
 use rws_common::{EventMessage, UserInfo};
 
@@ -29,6 +27,7 @@ pub async fn handle_join(username: String, sender_id: uuid::Uuid, clients: &Clie
 }
 
 pub async fn handle_chat(
+    id: uuid::Uuid,
     content: String,
     sender_id: uuid::Uuid,
     clients: &Clients,
@@ -48,6 +47,8 @@ pub async fn handle_chat(
         rm.user_rooms.get(&sender_id).cloned()
     };
 
+    let ack_delivered = EventMessage::AckDelivered { id };
+
     match room_id {
         Some(room_id) => {
             // If the user is in a room, broadcast to that room
@@ -55,6 +56,7 @@ pub async fn handle_chat(
             let room_manager = room_manager.lock().await;
 
             let chat_msg = EventMessage::Chat {
+                id,
                 sender: UserInfo {
                     id: sender_id,
                     username: sender.clone(),
@@ -74,10 +76,12 @@ pub async fn handle_chat(
             println!("DEBUG: Broadcasting to room {}: {:?}", room_id, chat_msg); // Debug log
 
             broadcast_to_room(&chat_msg, room_id, &room_manager, clients).await;
+           
         }
         None => {
             // If the user is not in a room, broadcast to all clients
             let chat_msg = EventMessage::Chat {
+                id,
                 sender: UserInfo {
                     id: sender_id,
                     username: sender.clone(),
@@ -88,5 +92,8 @@ pub async fn handle_chat(
             println!("DEBUG: Broadcasting to all clients: {:?}", chat_msg); // Debug log
             send(&chat_msg, clients).await;
         }
+
+         
     }
+    send_to_client(clients, sender_id, ack_delivered).await;
 }

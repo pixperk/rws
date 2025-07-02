@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use rws_common::EventMessage;
+use rws_common::{ChatScope, EventMessage, UserInfo};
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use url::Url;
+use uuid::Uuid;
 
 pub async fn connect_and_handle(
     username: String,
@@ -16,200 +18,190 @@ pub async fn connect_and_handle(
     let (ws_stream, _) = connect_async(Url::parse(&server_url)?).await?;
     let (mut write, mut read) = ws_stream.split();
 
-    // Send join message
     let join = EventMessage::Join {
         username: username.clone(),
     };
     let raw = serde_json::to_string(&join)?;
     write.send(WsMessage::Text(raw)).await?;
-
     ui_tx.send("🟢 Connected to server!".to_string())?;
 
-    // Handle incoming messages
-    let ui_tx_clone = ui_tx.clone();
     let self_id = Arc::new(Mutex::new(None));
-    let self_id_clone = Arc::clone(&self_id);
+    let pending_msgs = Arc::new(Mutex::new(HashMap::<Uuid, String>::new()));
 
+    // Reader
+    {
+        let self_id = Arc::clone(&self_id);
+        let ui_tx = ui_tx.clone();
+        let pending_msgs = Arc::clone(&pending_msgs);
 
-    tokio::spawn(async move {
-        while let Some(msg) = read.next().await {
-            if let Ok(WsMessage::Text(text)) = msg {
-                if let Ok(event) = serde_json::from_str::<EventMessage>(&text) {
-                    match event {
-                        EventMessage::AssignedId { user_id } => {
-                            let mut id = self_id_clone.lock().await;
-                            *id = Some(user_id);
-                        }
-                        _ => {
-                           let id = self_id_clone.lock().await;
-                        if let Some(my_id) = *id {
-                            let formatted = format_message(event,  &my_id);
-                            if !formatted.is_empty() {
-                                let _ = ui_tx_clone.send(formatted);
+        tokio::spawn(async move {
+            while let Some(msg) = read.next().await {
+                if let Ok(WsMessage::Text(text)) = msg {
+                    if let Ok(event) = serde_json::from_str::<EventMessage>(&text) {
+                        match &event {
+                            EventMessage::AssignedId { user_id } => {
+                                let mut id = self_id.lock().await;
+                                *id = Some(*user_id);
+                            }
+
+                            EventMessage::AckDelivered { id } => {
+                                let mut pending = pending_msgs.lock().await;
+                                if let Some(content) = pending.remove(id) {
+                                    let display =
+                                        format!("[GLOBAL]💬 You: {} (delivered)", content);
+                                    let _ = ui_tx.send(display);
+                                }
+                            }
+
+                            _ => {
+                                let my_id = self_id.lock().await;
+                                if let Some(my_id) = *my_id {
+                                    let formatted = format_message(event, &my_id);
+                                    if !formatted.is_empty() {
+                                        let _ = ui_tx.send(formatted);
+                                    }
+                                }
                             }
                         }
-                        }
-                        
-                    };
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
-    // Handle outgoing messages
+    // Writer
     while let Some(input) = ws_rx.recv().await {
-        if input.is_empty() {
+        if input.trim().is_empty() {
             continue;
         }
 
+        let my_id = *self_id.lock().await;
+        if my_id.is_none() {
+            continue;
+        }
+        let my_id = my_id.unwrap();
+
         let message = if input.starts_with("/create ") {
-            let room_name = input.strip_prefix("/create ").unwrap().to_string();
-            // Lock and extract the user id
-            let id_guard = self_id.lock().await;
-            if let Some(my_id) = *id_guard {
-                EventMessage::CreateRoom { 
-                    creator: rws_common::UserInfo {
+            let room_name = input["/create ".len()..].to_string();
+            EventMessage::CreateRoom {
+                creator: UserInfo {
+                    id: my_id,
+                    username: username.clone(),
+                },
+                room_name,
+            }
+        } else if input.starts_with("/join ") {
+            let room_id_str = input["/join ".len()..].trim();
+            match Uuid::parse_str(room_id_str) {
+                Ok(room_id) => EventMessage::JoinRoom {
+                    user: UserInfo {
                         id: my_id,
                         username: username.clone(),
                     },
-                    room_name
-                }
-            } else {
-                // If we don't have our id yet, skip sending the message
-                continue;
-            }
-        } else if input.starts_with("/join ") {
-            let room_id_str = input.strip_prefix("/join ").unwrap().trim();
-            match uuid::Uuid::parse_str(room_id_str) {
-                Ok(room_id) => {
-                    let id_guard = self_id.lock().await;
-                    if let Some(my_id) = *id_guard {
-                        EventMessage::JoinRoom {
-                            user: rws_common::UserInfo {
-                                id: my_id,
-                                username: username.clone(),
-                            },
-                            room: rws_common::RoomInfo {
-                                id: room_id,
-                                name: "".to_string(), // Name can be empty for join requests
-                            },
-                        }
-                    } else {
-                        // If we don't have our id yet, skip sending the message
-                        continue;
-                    }
-                }
+                    room: rws_common::RoomInfo {
+                        id: room_id,
+                        name: "".to_string(),
+                    },
+                },
                 Err(_) => {
                     ui_tx.send("❌ Invalid room ID format. Use: /join <room-uuid>".to_string())?;
                     continue;
                 }
             }
         } else if input.starts_with("/leave") {
-            let id_guard = self_id.lock().await;
-            if let Some(my_id) = *id_guard {
-                EventMessage::LeaveRoom {
-                    user: rws_common::UserInfo {
-                        id: my_id,
-                        username: username.clone(),
-                    },
-                    room: rws_common::RoomInfo {
-                        id: uuid::Uuid::nil(), // Server will determine the room
-                        name: "".to_string(),
-                    },
-                }
-            } else {
-                // If we don't have our id yet, skip sending the message
-                continue;
+            EventMessage::LeaveRoom {
+                user: UserInfo {
+                    id: my_id,
+                    username: username.clone(),
+                },
+                room: rws_common::RoomInfo {
+                    id: Uuid::nil(),
+                    name: "".to_string(),
+                },
             }
         } else {
-            // Lock and extract the user id
-            let id_guard = self_id.lock().await;
-            if let Some(my_id) = *id_guard {
-                EventMessage::Chat {
-                    sender: rws_common::UserInfo {
-                        id: my_id,
-                        username: username.clone(),
-                    },
-                    content: input,
-                    scope : rws_common::ChatScope::Global // Default to global chat
-                }
-            } else {
-                // If we don't have our id yet, skip sending the message
-                continue;
+            let msg_id = Uuid::new_v4();
+
+            // Insert into pending msgs
+            {
+                let mut pending = pending_msgs.lock().await;
+                pending.insert(msg_id, input.clone());
+            }
+
+            ui_tx.send(format!(
+                "[GLOBAL]💬 You: {} (sending...)",
+                input
+            ))?;
+
+            EventMessage::Chat {
+                id: msg_id,
+                sender: UserInfo {
+                    id: my_id,
+                    username: username.clone(),
+                },
+                content: input,
+                scope: ChatScope::Global,
             }
         };
 
         let raw = serde_json::to_string(&message)?;
-        if write.send(WsMessage::Text(raw)).await.is_err() {
-            break;
-        }
+        write.send(WsMessage::Text(raw)).await?;
     }
 
     Ok(())
 }
 
-fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
+fn format_message(event: EventMessage, self_id: &Uuid) -> String {
+    use EventMessage::*;
     match event {
-        EventMessage::Chat {
-            sender: rws_common::UserInfo { id: sender_id, username: sender_name },
+        Chat {
+            id: _,
+            sender: UserInfo { id, username },
             content,
-            scope 
-        } => {
-            match scope {
-                rws_common::ChatScope::Global => {
-                    if self_id == &sender_id {
-                        format!("[GLOBAL]💬 You: {}", content)
-                    } else {
-                        format!("[GLOBAL]💬 {}: {}", sender_name, content)
-                    }
-                }
-                rws_common::ChatScope::Room { room } => {
-                    if self_id == &sender_id {
-                        format!("[{}]🏠 You: {}", room.name, content)
-                    } else {
-                        format!("[{}]🏠 {}: {}",room.name, sender_name, content)
-                    }
+            scope,
+        } => match scope {
+            ChatScope::Global => {
+                if &id == self_id {
+                    // Already handled via ack
+                    "".into()
+                } else {
+                    format!("[GLOBAL]💬 {}: {}", username, content)
                 }
             }
-        }
-        EventMessage::Join { username } => {
-           
-                format!("👋 {} joined", username)
-            
-        }
-        EventMessage::CreateRoom { 
-            creator: rws_common::UserInfo { id: _, username },
-            room_name,
-        } => {
-            format!("🏠 Room '{}' created! by '{}'", room_name, username)
-        }
-        EventMessage::JoinRoom {
-            user: rws_common::UserInfo { id: user_id, username },
-            room : rws_common::RoomInfo { id: _, name },
-        } => {
-            if self_id == &user_id {
-                format!("✅ You joined room {}", name)
-            } else {
-                format!("👥 {} joined room {}", username, name)
+            ChatScope::Room { room } => {
+                if &id == self_id {
+                    format!("[{}]🏠 You: {}", room.name, content)
+                } else {
+                    format!("[{}]🏠 {}: {}", room.name, username, content)
+                }
             }
-        }
-        EventMessage::LeaveRoom {
-            user: rws_common::UserInfo { id: user_id, username },
-            room : rws_common::RoomInfo { id: _, name },
-        } => {
-            if self_id == &user_id {
-                format!("🚪 You left room {}", name)
-            } else {
-                format!("👋 {} left room {}", username, name)
-            }
-        }
-        EventMessage::Error { error } => match error {
-            rws_common::ErrorCode::RoomNotFound { message } => format!("❌ Room not found: {}", message),
-            rws_common::ErrorCode::RoomAlreadyExists { message } => format!("❌ Room already exists: {}", message),
-            rws_common::ErrorCode::AlreadyInRoom { message } => format!("❌ Already in a room: {}", message),
-            rws_common::ErrorCode::InvalidRoomId { message } => format!("❌ Invalid room ID: {}", message),
-            rws_common::ErrorCode::PermissionDenied { message } => format!("❌ Permission denied: {}", message),
         },
-        _ => String::new(),
+        Join { username } => format!("👋 {} joined", username),
+        CreateRoom {
+            creator: UserInfo { username, .. },
+            room_name,
+        } => format!("🏠 Room '{}' created by '{}'", room_name, username),
+        JoinRoom {
+            user: UserInfo { id, username },
+            room,
+        } => {
+            if &id == self_id {
+                format!("✅ You joined room {}", room.name)
+            } else {
+                format!("👥 {} joined room {}", username, room.name)
+            }
+        }
+        LeaveRoom {
+            user: UserInfo { id, username },
+            room,
+        } => {
+            if &id == self_id {
+                format!("🚪 You left room {}", room.name)
+            } else {
+                format!("👋 {} left room {}", username, room.name)
+            }
+        }
+        Error { error } => format!("❌ Error: {:?}", error),
+        _ => "".into(),
     }
 }

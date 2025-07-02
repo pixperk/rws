@@ -3,13 +3,40 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "event", content = "data")]
 pub enum EventMessage {
-    Join { username: String },
-    AssignedId { user_id: uuid::Uuid },
-    Chat { sender: UserInfo, content: String, scope: ChatScope },
-    CreateRoom { creator: UserInfo, room_name: String },
-    JoinRoom { user: UserInfo, room: RoomInfo },
-    LeaveRoom { user: UserInfo, room: RoomInfo },
-    Error { error: ErrorCode },
+    Join {
+        username: String,
+    },
+    AssignedId {
+        user_id: uuid::Uuid,
+    },
+    Chat {
+        id: uuid::Uuid,
+        sender: UserInfo,
+        content: String,
+        scope: ChatScope,
+    },
+    AckDelivered {
+        id : uuid::Uuid,
+    },
+    AckRead {
+        id: uuid::Uuid,
+        reader: UserInfo,
+    },
+    CreateRoom {
+        creator: UserInfo,
+        room_name: String,
+    },
+    JoinRoom {
+        user: UserInfo,
+        room: RoomInfo,
+    },
+    LeaveRoom {
+        user: UserInfo,
+        room: RoomInfo,
+    },
+    Error {
+        error: ErrorCode,
+    },
     Ping,
 }
 
@@ -21,7 +48,7 @@ pub struct UserInfo {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RoomInfo {
-    pub id : uuid::Uuid,
+    pub id: uuid::Uuid,
     pub name: String,
 }
 
@@ -39,5 +66,5 @@ pub enum ErrorCode {
 #[serde(tag = "scope", content = "details")]
 pub enum ChatScope {
     Global,
-    Room{room : RoomInfo},
+    Room { room: RoomInfo },
 }
