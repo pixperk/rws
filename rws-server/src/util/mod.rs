@@ -1,5 +1,7 @@
 use crate::client::Clients;
 
+pub mod broadcast;
+
 pub async fn get_username_from_client(
     clients: &Clients,
     client_id: uuid::Uuid,

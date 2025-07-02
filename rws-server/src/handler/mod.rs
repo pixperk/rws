@@ -1,34 +1,12 @@
-use crate::Clients;
-use futures_util::SinkExt;
+use crate::{util::broadcast::{send, send_to_client}, Clients};
+
 use rws_common::{EventMessage, UserInfo};
 
-use tokio_tungstenite::tungstenite::protocol::Message as WsMessage;
+
 
 pub mod room_handler;
 
-/// Broadcast a message to all connected clients
-pub async fn send(message: &EventMessage, clients: &Clients) {
-    let clients = clients.lock().await;
-    let payload = serde_json::to_string(message).unwrap();
 
-    for (_, client) in clients.iter() {
-        let mut tx = client.tx.lock().await;
-        let _ = tx.send(WsMessage::Text(payload.clone())).await;
-    }
-}
-
-/// Broadcast a message to all connected clients except the sender
-pub async fn broadcast(message: &EventMessage, sender_id: uuid::Uuid, clients: &Clients) {
-    let clients = clients.lock().await;
-    let payload = serde_json::to_string(message).unwrap();
-
-    for (id, client) in clients.iter() {
-        if *id != sender_id {
-            let mut tx = client.tx.lock().await;
-            let _ = tx.send(WsMessage::Text(payload.clone())).await;
-        }
-    }
-}
 
 pub async fn handle_join(username: String, sender_id: uuid::Uuid, clients: &Clients) {
     {
@@ -39,10 +17,7 @@ pub async fn handle_join(username: String, sender_id: uuid::Uuid, clients: &Clie
 
             //Assign an ID to the client
             let id_msg = EventMessage::AssignedId { user_id: sender_id };
-            let tx = client.tx.clone();
-            let payload = serde_json::to_string(&id_msg).unwrap();
-            let mut tx_lock = tx.lock().await;
-            let _ = tx_lock.send(WsMessage::Text(payload)).await;
+            send_to_client(clients, sender_id, id_msg).await;
         }
     } // Release the lock here
 
