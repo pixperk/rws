@@ -127,6 +127,13 @@ fn format_message(event: EventMessage, self_id: &uuid::Uuid) -> String {
         }=> {
             format!("🏠 Room '{}' created! by '{}'", room_name, username)
         }
+        EventMessage::Error { error } => match error {
+            rws_common::ErrorCode::RoomNotFound { message } => format!("❌ Room not found: {}", message),
+            rws_common::ErrorCode::RoomAlreadyExists { message } => format!("❌ Room already exists: {}", message),
+            rws_common::ErrorCode::AlreadyInRoom { message } => format!("❌ Already in a room: {}", message),
+            rws_common::ErrorCode::InvalidRoomId { message } => format!("❌ Invalid room ID: {}", message),
+            rws_common::ErrorCode::PermissionDenied { message } => format!("❌ Permission denied: {}", message),
+        },
         _ => String::new(),
     }
 }
