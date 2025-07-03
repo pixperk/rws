@@ -9,10 +9,12 @@ use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use url::Url;
 use uuid::Uuid;
 
+use crate::app::UiEvent;
+
 pub async fn connect_and_handle(
     username: String,
     server_url: String,
-    ui_tx: mpsc::UnboundedSender<String>,
+    ui_tx: mpsc::UnboundedSender<UiEvent>,
     mut ws_rx: mpsc::UnboundedReceiver<String>,
 ) -> Result<()> {
     let (ws_stream, _) = connect_async(Url::parse(&server_url)?).await?;
@@ -23,7 +25,10 @@ pub async fn connect_and_handle(
     };
     let raw = serde_json::to_string(&join)?;
     write.send(WsMessage::Text(raw)).await?;
-    ui_tx.send("🟢 Connected to server!".to_string())?;
+    ui_tx.send(UiEvent::AddMessage {
+        content: "🟢 Connected to server!".to_string(),
+        is_system: true,
+    })?;
 
     let self_id = Arc::new(Mutex::new(None));
     let pending_msgs = Arc::new(Mutex::new(HashMap::<Uuid, String>::new()));
@@ -44,12 +49,44 @@ pub async fn connect_and_handle(
                                 *id = Some(*user_id);
                             }
 
+                            EventMessage::Chat { id, sender, content, scope } => {
+                                let my_id = self_id.lock().await;
+                                if let Some(my_id) = *my_id {
+                                    // Check if this is our own message coming back from server
+                                    if sender.id == my_id {
+                                        // This is our message being echoed back - treat as delivery confirmation
+                                        let mut pending = pending_msgs.lock().await;
+                                        if let Some(original_content) = pending.remove(id) {
+                                            let delivered_msg = match scope {
+                                                ChatScope::Global => format!("[GLOBAL]💬 You: {} ✅", original_content),
+                                                ChatScope::Room { room } => format!("[{}]🏠 You: {} ✅", room.name, original_content),
+                                            };
+                                            let _ = ui_tx.send(UiEvent::UpdateMessage {
+                                                id: *id,
+                                                content: delivered_msg,
+                                            });
+                                        }
+                                    } else {
+                                        // This is someone else's message
+                                        let formatted = format_message(event, &my_id);
+                                        if !formatted.is_empty() {
+                                            let _ = ui_tx.send(UiEvent::AddMessage {
+                                                content: formatted,
+                                                is_system: false,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
                             EventMessage::AckDelivered { id } => {
                                 let mut pending = pending_msgs.lock().await;
                                 if let Some(content) = pending.remove(id) {
-                                    let display =
-                                        format!("[GLOBAL]💬 You: {} (delivered)", content);
-                                    let _ = ui_tx.send(display);
+                                    let delivered_content = format!("[GLOBAL]💬 You: {} ", content);
+                                    let _ = ui_tx.send(UiEvent::UpdateMessage {
+                                        id: *id,
+                                        content: delivered_content,
+                                    });
                                 }
                             }
 
@@ -58,7 +95,10 @@ pub async fn connect_and_handle(
                                 if let Some(my_id) = *my_id {
                                     let formatted = format_message(event, &my_id);
                                     if !formatted.is_empty() {
-                                        let _ = ui_tx.send(formatted);
+                                        let _ = ui_tx.send(UiEvent::AddMessage {
+                                            content: formatted,
+                                            is_system: false,
+                                        });
                                     }
                                 }
                             }
@@ -104,7 +144,10 @@ pub async fn connect_and_handle(
                     },
                 },
                 Err(_) => {
-                    ui_tx.send("❌ Invalid room ID format. Use: /join <room-uuid>".to_string())?;
+                    ui_tx.send(UiEvent::AddMessage {
+                        content: "❌ Invalid room ID format. Use: /join <room-uuid>".to_string(),
+                        is_system: true,
+                    })?;
                     continue;
                 }
             }
@@ -128,10 +171,11 @@ pub async fn connect_and_handle(
                 pending.insert(msg_id, input.clone());
             }
 
-            ui_tx.send(format!(
-                "[GLOBAL]💬 You: {} (sending...)",
-                input
-            ))?;
+            ui_tx.send(UiEvent::AddMessageWithId {
+                id: msg_id,
+                content: format!("[GLOBAL]💬 You: {} ⏳", input),
+                is_system: false,
+            })?;
 
             EventMessage::Chat {
                 id: msg_id,

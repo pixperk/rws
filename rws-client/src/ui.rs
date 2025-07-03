@@ -15,7 +15,7 @@ use ratatui::{
 use std::io;
 use tokio::sync::mpsc;
 
-use crate::{app::App, client};
+use crate::{app::{App, UiEvent}, client};
 
 pub async fn run(app: &mut App) -> Result<()> {
     enable_raw_mode()?;
@@ -24,7 +24,7 @@ pub async fn run(app: &mut App) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let (ui_tx, mut ui_rx) = mpsc::unbounded_channel();
+    let (ui_tx, mut ui_rx) = mpsc::unbounded_channel::<UiEvent>();
     let (ws_tx, ws_rx) = mpsc::unbounded_channel();
     app.tx = Some(ws_tx.clone());
 
@@ -39,8 +39,8 @@ pub async fn run(app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| draw_ui(f, app))?;
 
-        while let Ok(msg) = ui_rx.try_recv() {
-            app.add_message(msg, true);
+        while let Ok(event) = ui_rx.try_recv() {
+            app.handle_ui_event(event);
         }
 
         if event::poll(std::time::Duration::from_millis(16))? {
