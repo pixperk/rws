@@ -3,6 +3,14 @@ name = "rws-server"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "rws_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rws-server"
+path = "src/main.rs"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 tokio-tungstenite = "0.18"
@@ -11,4 +19,5 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures-util = "0.3"
 uuid = { version = "1.0", features = ["v4"] }
+anyhow = "1.0"
 rws-common = { path = "../rws-common" }
